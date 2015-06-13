@@ -941,7 +941,7 @@ jQuery.ajaxifier = {
 
 		        	var closeable = document.createElement('i');
 					closeable.title = array[i];
-					$(closeable).addClass("glyphicons glyphicons-remove");
+					$(closeable).addClass("glyphicon glyphicon-remove-circle");
 					$(closeable).css("margin-left", "10px");
 					$(closeable).attr("role", "button");
 					$(closeable).attr("aria-labelledby", "tab-" + i);
