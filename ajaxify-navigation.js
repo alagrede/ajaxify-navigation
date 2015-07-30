@@ -689,6 +689,8 @@ jQuery.ajaxifier = {
 	    jQuery.ajaxSetup({async:true}); // on réactive le mode par défaut jquery
 
 	    $.ajaxifier.initHistory();
+	    
+		$("input[autofocus]").focus();
 	},
 
 
@@ -799,6 +801,7 @@ jQuery.ajaxifier = {
 		 $(window).scrollTop(1);
 		 $(window).scrollTop(0);
 		
+		 $("input[autofocus]").focus();
 	},
 
 		
@@ -1391,6 +1394,9 @@ jQuery.ajaxifier = {
 		// scroll top (fix pour recalculer la hauteur de la scrollbar)
 		 $(window).scrollTop(1);
 		 $(window).scrollTop(0);
+		 
+		 
+		 $("input[autofocus]").focus();
     },
 
 
