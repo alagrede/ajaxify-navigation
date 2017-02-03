@@ -116,6 +116,7 @@ jQuery.ajaxifier = {
     reopenHistoryTabs: 'true',
     maxTabs: 100,
     homeUrl: '',
+    needFocus: 'focus',
 
 	openTabs: 0,
 	// Tableau général JS contenant les onglets
@@ -148,6 +149,7 @@ jQuery.ajaxifier = {
             reopenHistoryTabs: this.reopenHistoryTabs,
             maxTabs: this.maxTabs,
             homeUrl: this.homeUrl,
+            needFocus: this.needFocus,
 		}, options);
 
 		this.ajaxLinks = options.ajaxLinks;
@@ -166,6 +168,7 @@ jQuery.ajaxifier = {
         this.reopenHistoryTabs = options.reopenHistoryTabs;
         this.maxTabs = options.maxTabs;
         this.homeUrl = options.homeUrl;
+        this.needFocus = options.needFocus;
 
 		// Récupération dans le localStorage les onglets ouverts
 		if(typeof localStorage != 'undefined') {
@@ -292,7 +295,7 @@ jQuery.ajaxifier = {
 		// Permet de capter les submit des formulaires
   		//$("body").delegate("form", "submit", function(e) {
 		//$('form').submit(function(e){
-		$("#pageModal").delegate("form", "submit", function(e) {
+		$("#pageModal").delegate("form:not("+ $.ajaxifier.noAjaxLinks +")", "submit", function(e) {
 			e.stopPropagation();
 			e.preventDefault(); //Prevent the normal submission action
 
@@ -301,7 +304,7 @@ jQuery.ajaxifier = {
 			return processFormPopup(form, formData, null);
 		});
 
-		$("#pageModal").delegate("input[type='submit']", "click", function(e) {		
+		$("#pageModal").delegate("input[type='submit']:not("+ $.ajaxifier.noAjaxLinks +")", "click", function(e) {
 			e.stopPropagation();
 			e.preventDefault(); //Prevent the normal submission action
 
@@ -317,6 +320,7 @@ jQuery.ajaxifier = {
 			e.stopPropagation();
 
 			var link = $(this).attr('href');
+			var $this = $(this); // L'objet jQuery du formulaire
 			
             if (typeof link == typeof undefined || link == false) {
                    return;
@@ -407,7 +411,14 @@ jQuery.ajaxifier = {
 
 		    var link = form.attr('action');
 		    //var formData = $this.serialize();
-
+		    
+		    var finalLink = "";
+		    if(form.attr("method").toLowerCase() == "get") {
+		    	finalLink = link + "?"+ form.serialize();
+		    } else {
+		    	finalLink = link;
+		    }
+		    
 		    var processData = true;
 		    var contentType = "application/x-www-form-urlencoded; charset=UTF-8";
 
@@ -445,24 +456,30 @@ jQuery.ajaxifier = {
                 		if (window.location.pathname == xhr.getResponseHeader("Location")) {
                 			addToHistory = false;
                 		}
-                		link = xhr.getResponseHeader("Location");
+                		finalLink = xhr.getResponseHeader("Location");
                 	} 
 
 
                 	if (form.hasClass($.ajaxifier.tabLink)) {
 					
 						$( $.ajaxifier.refreshContent ).fadeOut('fast', function(){
-							$.ajaxifier.ajaxify(html, link, form.hasClass($.ajaxifier.tabLink), addToHistory); // J'affiche la réponse
+							$.ajaxifier.ajaxify(html, finalLink, form.hasClass($.ajaxifier.tabLink), addToHistory); // J'affiche la réponse
 							$($.ajaxifier.refreshContent).fadeIn('fast');
 							$.ajaxifier.refreshTabIfNeeded(form, html);
 							$.ajaxifier.closeTabIfNeeded(originalTitle, closeable);
 						});
 					
 					} else {
-						$.ajaxifier.ajaxify(html, link, form.hasClass($.ajaxifier.tabLink), addToHistory);
+						$.ajaxifier.ajaxify(html, finalLink, form.hasClass($.ajaxifier.tabLink), addToHistory);
 						$.ajaxifier.refreshTabIfNeeded(form, html);
 						$.ajaxifier.closeTabIfNeeded(originalTitle, closeable);
 					}
+
+
+					// permet de donner le focus à l'élément appelant si demandé
+	  				if (typeof form.attr("data-focus") !== typeof undefined && form.attr("data-focus") !== false) {
+	  					$($.ajaxifier.refreshContent).find("#"+form.attr("data-focus")).focus();
+	  				}
 
 					return false;
                     
@@ -474,13 +491,13 @@ jQuery.ajaxifier = {
 		// Permet de capter les submit des formulaires
   		//$("body").delegate("form", "submit", function(e) {
 		//$('form').submit(function(e){
-		$("body").delegate("form", "submit", function(e) {
+		$("body").delegate("form:not("+ $.ajaxifier.noAjaxLinks +")", "submit", function(e) {
 			var form = $(this); // L'objet jQuery du formulaire
 			var formData = form.serialize();
 			return processFormBody(form, formData, null, e);
 		});
 
-		$("body").delegate("input[type='submit']", "click", function(e) {		
+		$("body").delegate("input[type='submit']:not("+ $.ajaxifier.noAjaxLinks +")", "click", function(e) {
 			var form = $(this).closest('form');
 			var formData = form.serializeArray();
 			return processFormBody(form, formData, { name: $(this).attr('name'), value: $(this).val() }, e);
@@ -547,6 +564,16 @@ jQuery.ajaxifier = {
 					$.ajaxifier.refreshTabIfNeeded($this, html);								
 				}
 
+
+				// permet de donner le focus à l'élément appelant si demandé
+	  			if ($this.hasClass($.ajaxifier.needFocus)) {
+	  				if (typeof $this.attr("id") !== typeof undefined && $this.attr("id") !== false) {
+	  					$($.ajaxifier.refreshContent).find("#"+$this.attr("id")).focus();
+	  				}	  				
+	  			}
+
+
+
 				//return false;
 				},
 
@@ -580,46 +607,22 @@ jQuery.ajaxifier = {
   		}
 
   		// Controle clavier pour changer de tab
-		var down = [];
-		$(document).keydown(function(e) {
-		    down[e.keyCode] = true;
-		}).keyup(function(e) {
-		    if (down[17] && down[16] && down[39]) { // Ctrl + Shift + fleche droite
-		    	var tabsTitles = $.ajaxifier.tabs[0]
-		    	var activeTitle = $("ul#v-tabs  li.active").text();
-				var index = $.inArray(activeTitle, tabsTitles); // On essaye de récupérer l'onglet actif
-				if (index < tabsTitles.length -1) {
-					index += 1;
-				}
-				$.ajaxifier.switchTab(tabsTitles[index]);
-
-				if ($.ajaxifier.isHistoryAvailable) {
-					if (index != -1) {
-						console.log("Push State:{reload: false, tab: false}, " + tabsTitles[index] + ", " + $.ajaxifier.tabs[2][index]);
-						history.pushState({reload: false, tab: false}, tabsTitles[index], $.ajaxifier.tabs[2][index]); //url	
-					}
-				}
-
-		    } else if (down[17] && down[16] && down[37]) {  // Ctrl + Shift + fleche gauche
-				var tabsTitles = $.ajaxifier.tabs[0]
-		    	var activeTitle = $("ul#v-tabs  li.active").text();
-				index = $.inArray(activeTitle, tabsTitles); // On essaye de récupérer l'onglet actif
-				if (index > 0) {
-					index -= 1;
-				}
-				$.ajaxifier.switchTab(tabsTitles[index]);
-
-				if ($.ajaxifier.isHistoryAvailable) {
-					if (index != -1) {
-						console.log("Push State:{reload: false, tab: false}, " + tabsTitles[index] + ", " + $.ajaxifier.tabs[2][index]);
-						history.pushState({reload: false, tab: false}, tabsTitles[index], $.ajaxifier.tabs[2][index]); //url	
-					}
-				}
-
-		    }
-
-		    down[e.keyCode] = false;
-		});
+		//var down = [];
+		//$(document).keydown(function(e) {
+		//    down[e.keyCode] = true;
+		//}).keyup(function(e) {
+		//    if (down[17] && down[16] && down[39]) { // Ctrl + Shift + fleche droite
+        //
+		//    	$.ajaxifier.showNextTab();
+        //
+		//    } else if (down[17] && down[16] && down[37]) {  // Ctrl + Shift + fleche gauche
+        //
+		//    	$.ajaxifier.showPreviousTab();
+        //
+		//    }
+        //
+		//    down[e.keyCode] = false;
+		//});
 		
   		//ctrl 17, shift 16, right arrow 39, left arrow 37  
 	    
@@ -636,6 +639,44 @@ jQuery.ajaxifier = {
 	================================================================================================
 	*/
 
+	showNextTab : function showNextTab() {
+
+    	var tabsTitles = $.ajaxifier.tabs[0]
+    	var activeTitle = $("ul#v-tabs  li.active").text();
+		var index = $.inArray(activeTitle, tabsTitles); // On essaye de récupérer l'onglet actif
+		if (index < tabsTitles.length -1) {
+			index += 1;
+		}
+		$.ajaxifier.switchTab(tabsTitles[index]);
+
+		if ($.ajaxifier.isHistoryAvailable) {
+			if (index != -1) {
+				console.log("Push State:{reload: false, tab: false}, " + tabsTitles[index] + ", " + $.ajaxifier.tabs[2][index]);
+				history.pushState({reload: false, tab: false}, tabsTitles[index], $.ajaxifier.tabs[2][index]); //url	
+			}
+		}
+
+	},
+
+	showPreviousTab : function showPreviousTab() {
+
+		var tabsTitles = $.ajaxifier.tabs[0]
+    	var activeTitle = $("ul#v-tabs  li.active").text();
+		index = $.inArray(activeTitle, tabsTitles); // On essaye de récupérer l'onglet actif
+		if (index > 0) {
+			index -= 1;
+		}
+		$.ajaxifier.switchTab(tabsTitles[index]);
+
+		if ($.ajaxifier.isHistoryAvailable) {
+			if (index != -1) {
+				console.log("Push State:{reload: false, tab: false}, " + tabsTitles[index] + ", " + $.ajaxifier.tabs[2][index]);
+				history.pushState({reload: false, tab: false}, tabsTitles[index], $.ajaxifier.tabs[2][index]); //url	
+			}
+		}
+
+
+	},
 
 	partLoadFromServer: function loadFromServer(url, htmlSelector) {
 			$.get( url, function( html ) {
@@ -693,6 +734,50 @@ jQuery.ajaxifier = {
 		$("input[autofocus]").focus();
 	},
 
+	// Marque l'onglet courant comme contenant des modifications ou non
+	setActiveTabModified: function setActiveTabModified(modify) {
+        var activeTitle = $("ul#v-tabs  li.active").text();
+        var index = $.inArray(activeTitle, $.ajaxifier.tabs[0]); // On essaye de récupérer l'onglet actif depuis le tabeau JS
+        if(index >= 0){
+            $.ajaxifier.tabs[3][index]=modify;
+        }
+	},
+	
+	// Ferme l'onglet courant (affiche la popup de modif en cours si besoin)
+	closeActiveTab: function closeActiveTab(){
+		
+		if ($.ajaxifier.tabs[0].length == 1) { // lorsqu'on ferme le dernier onglet on redirige sur l'accueil
+			if ($.ajaxifier.homeUrl != '') {
+				$.ajaxifier.loadFromServer($.ajaxifier.homeUrl, false);
+				return;
+			}
+		}
+		
+        var activeTitle = $("ul#v-tabs li.active").text();
+        var index = $.inArray(activeTitle, $.ajaxifier.tabs[0]); // On essaye de récupérer l'onglet actif depuis le tabeau JS
+        if (index >= 0) {
+            if ($.ajaxifier.tabs[3][index] == true){
+               // Ajout event sur le click ok pour fermer
+               $('#tabModifsModal #tabCloseConfirm').click(function(e) {
+                              $.ajaxifier.closeActiveTab();
+                              $('#tabModifsModal').modal('hide');
+               });
+               // AJout event sur la fermeture de la modal: on retire l'event click (pour ne pas les cumuler)
+               $('#tabModifsModal').on('hidden.bs.modal', function (e) {
+                              $("#tabModifsModal #tabCloseConfirm").unbind();
+                              $(this).unbind();
+               });
+
+               $('#tabModifsModal .modal-title').text("Modification en cours dans l'onglet '" + activeTitle + "'");
+               $('#tabModifsModal').modal('show');
+
+               return false;
+            }
+        }
+        return true;
+    },
+
+	
 
 	reopenTabs: function reopenTabs(links, ii, firstTabOpen) {
 		/*
@@ -732,6 +817,13 @@ jQuery.ajaxifier = {
 
 	},
 
+	closeActiveTab: function closeActiveTab(){
+    var activeTitle = $("ul#v-tabs li.active").text();
+    var index = $.inArray(activeTitle, $.ajaxifier.tabs[0]); // On essaye de récupérer l'onglet actif depuis le tabeau JS
+       if (index >= 0) {
+          $.ajaxifier.closeTab(index);    
+        }
+    },
 
 	initHistory: function initHistory() {
   		// Gestion de l'historique
@@ -796,12 +888,13 @@ jQuery.ajaxifier = {
 		$.ajaxifier.clearNode(tabsNode);
 		//tabsNode.appendChild($.ajaxifier.makeUL(tabsTitles[index]));
 		$(tabsNode).replaceWith($.ajaxifier.makeUL(tabsTitles[index]));
-		
+		$("#v-tabs li.active a").focus();
+
 		// scroll top (fix pour recalculer la hauteur de la scrollbar)
-		 $(window).scrollTop(1);
-		 $(window).scrollTop(0);
+		$(window).scrollTop(1);
+		$(window).scrollTop(0);
 		
-		 $("input[autofocus]").focus();
+		$("input[autofocus]").focus();
 	},
 
 		
@@ -915,39 +1008,94 @@ jQuery.ajaxifier = {
 		        item.setAttribute("id", "tab-" + i);
 		        item.setAttribute("role", "tab");
 		        item.setAttribute("aria-controls", String($.ajaxifier.refreshContent).replace("#", "").replace(".", ""));
+		        
+
+		        // Create link a
+		        var a = document.createElement('a');
+		        var pageTitle = document.createTextNode(array[i]);
+
+		        a.appendChild(pageTitle);
+		        		        
+		        //span.title = array[i];
+		        a.title = array[i];
+		    	$(a).attr("href", tabsUrls[i]);
+		        
+		        // add click event
+		        a.addEventListener("click", function(e){
+		        	e.preventDefault();
+		        	
+					// On sauvegarde l'état de la page pour la gestion du back
+					if ($.ajaxifier.isHistoryAvailable) {
+						var index = $.inArray(e.currentTarget.href, $.ajaxifier.tabs[0]);
+						if (index != -1) {
+							console.log("Push State:{reload: false, tab: false}, " + e.currentTarget.title + ", " + $.ajaxifier.tabs[2][index]);
+							history.pushState({reload: false, tab: false}, e.currentTarget.title, $.ajaxifier.tabs[2][index]); //url	
+						}
+					}
+
+					$.ajaxifier.switchTab(e.currentTarget.textContent);
+
+		        }, false);
+
+		        // pilotage de la navigation entre les onglets par clavier
+		        a.addEventListener("keydown", function(e){
+					if(e.keyCode == 39 || e.keyCode == 40) { // fleche droite ou bas
+						e.preventDefault();
+					    $.ajaxifier.showNextTab();
+					    return false;
+					}
+
+					if(e.keyCode == 37 || e.keyCode == 38) { // fleche gauche ou haut
+						e.preventDefault();
+						$.ajaxifier.showPreviousTab();
+						return false;
+					}
+
+		        }, false);
+
+
 
 
                 if (array[i]== activeTitle) {
 			        	$(item).addClass("active");
 			            $(item).attr('aria-selected', 'true');
+			            $(a).attr("tabindex", 0); // on peut naviguer au clavier uniquement l'onglet actif
 
                     // mise à jour du menu de la page
 					$.ajaxifier.refreshMenu(tabsUrls[i]);
 
 		        } else {
+		        	$(a).attr("tabindex", -1);
 		        	$(item).attr('aria-selected', 'false');
 		        }
 		        
 		        $(item).addClass($.ajaxifier.noAjaxLinks);
+		       
 
-		        // Create link a
-		        var a = document.createElement('a');
-		        var linkText = document.createTextNode(array[i]);
 
-		        a.appendChild(linkText);
-		        
+		        // Set its contents:
+		        item.appendChild(a);
+
+
 				//var htmlNode = document.createElement('span');
 				//htmlNode.innerHTML = "<i class='glyphicon glyphicon-remove' style='margin-left:10px;'></i>";
 				
 		        // On a le droit de fermer le dernier onglet uniquement s'il ne s'agit pas de l'accueil
 		        if (!(array.length == 1 && String(tabsUrls[i]).indexOf($.ajaxifier.homeUrl) != -1)) {
 
-		        	var closeable = document.createElement('i');
-					closeable.title = array[i];
+		        	var closeable = document.createElement('button');
+					$(closeable).attr("tab-title", array[i]);
 					$(closeable).addClass("glyphicon glyphicon-remove-circle");
 					$(closeable).css("margin-left", "10px");
-					$(closeable).attr("role", "button");
-					$(closeable).attr("aria-labelledby", "tab-" + i);
+					//$(closeable).attr("role", "button");
+					$(closeable).attr("aria-label", "Fermeture de l'onglet: " + array[i] /*"tab-" + i*/);
+					
+					if ($(item).hasClass("active")) {
+						$(closeable).attr("tabindex", 0);
+					} else {
+						$(closeable).attr("tabindex", -1);
+					}
+					
 	
 					// On ferme l'onglet sur le click de l'icone croix
 					closeable.addEventListener("click", function(e){
@@ -962,7 +1110,7 @@ jQuery.ajaxifier = {
 							}
 						}
 	
-						var index = $.inArray(e.currentTarget.title, $.ajaxifier.tabs[0]);
+						var index = $.inArray($(e.currentTarget).attr("tab-title"), $.ajaxifier.tabs[0]);
 						
 						if ($.ajaxifier.tabs[3][index] == true) {
 							// Des modifs en cours => avertir l'utilisateur avant destruction de l'onglet
@@ -979,7 +1127,7 @@ jQuery.ajaxifier = {
 								  $(this).unbind();
 								})
 	
-								$('#tabModifsModal .modal-title').text("Modification en cours dans l'onglet '" + e.currentTarget.title + "'");
+								$('#tabModifsModal .modal-title').text("Modification en cours dans l'onglet '" + $(e.currentTarget).attr("tab-title") + "'");
 								$('#tabModifsModal').modal('show');
 	
 							}
@@ -994,30 +1142,9 @@ jQuery.ajaxifier = {
 
 					a.appendChild(closeable);
 		        }
-		        
 
-		        a.title = array[i];
-		    	a.href = tabsUrls[i];    
-		        
-		        // add click event
-		        a.addEventListener("click", function(e){
-		        	e.preventDefault();
-		        	
-					// On sauvegarde l'état de la page pour la gestion du back
-					if ($.ajaxifier.isHistoryAvailable) {
-						var index = $.inArray(e.currentTarget.title, $.ajaxifier.tabs[0]);
-						if (index != -1) {
-							console.log("Push State:{reload: false, tab: false}, " + e.currentTarget.title + ", " + $.ajaxifier.tabs[2][index]);
-							history.pushState({reload: false, tab: false}, e.currentTarget.title, $.ajaxifier.tabs[2][index]); //url	
-						}
-					}
 
-					$.ajaxifier.switchTab(e.currentTarget.title);
 
-		        }, false);
-		        
-		        // Set its contents:
-		        item.appendChild(a);
 		        // Add it to the list:
 		        list.appendChild(item);
 		    }
@@ -1127,6 +1254,7 @@ jQuery.ajaxifier = {
 			    $.ajaxifier.clearNode(tabsNode);
 			    //tabsNode.appendChild($.ajaxifier.makeUL(title));
 			    $(tabsNode).replaceWith($.ajaxifier.makeUL(title));
+			    $("#v-tabs li.active a").focus();
 		
 
 		} else { // On remplace l'onglet actif par le nouveau
@@ -1187,6 +1315,7 @@ jQuery.ajaxifier = {
 		    $.ajaxifier.clearNode(tabsNode);
 		    //tabsNode.appendChild($.ajaxifier.makeUL(title));
 		    $(tabsNode).replaceWith($.ajaxifier.makeUL(title));
+			$("#v-tabs li.active a").focus();
 
 		}
 		return newTabCreated;
